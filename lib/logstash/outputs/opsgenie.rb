@@ -1,46 +1,42 @@
 require "logstash/outputs/base"
 require "logstash/namespace"
+require "uri"
+require "net/http"
+require "net/https"
 
-class LogStash::Outputs::Mongodb < LogStash::Outputs::Base
+# Ugly monkey patch to get around <http://jira.codehaus.org/browse/JRUBY-5529>
+Net::BufferedIO.class_eval do
+    BUFSIZE = 1024 * 16
 
-  config_name "mongodb"
+    def rbuf_fill
+      timeout(@read_timeout) {
+        @rbuf << @io.sysread(BUFSIZE)
+      }
+    end
+end
+
+
+class LogStash::Outputs::OpsGenie < LogStash::Outputs::Base
+
+  config_name "opsgenie"
   plugin_status "beta"
 
-  # your mongodb host
-  config :host, :validate => :string, :required => true
-
-  # the mongodb port
-  config :port, :validate => :number, :default => 27017
-
-  # The database to use
-  config :database, :validate => :string, :required => true
-
-  config :user, :validate => :string, :required => false
-  config :password, :validate => :password, :required => false
-
-  # The collection to use. This value can use %{foo} values to dynamically
-  # select a collection based on data in the event.
-  config :collection, :validate => :string, :required => true
+  # your opsgenie host
+  config :host, :validate => :string,  :default => "alerts.opsgenie.com"
+  config :key, :validate => :string, :required => true
+  config :proto, :validate => :string, :default => "http"
 
   public
   def register
-    require "mongo"
-    # TODO(petef): check for errors
-    db = Mongo::Connection.new(@host, @port).db(@database)
-    auth = true
-    if @user then
-      auth = db.authenticate(@user, @password.value) if @user
-    end
-    if not auth then
-      raise RuntimeError, "MongoDB authentication failure"
-    end
-    @mongodb = db
-  end # def register
+    # nothing to do
+  end 
 
   public
   def receive(event)
     return unless output?(event)
-
-    @mongodb.collection(event.sprintf(@collection)).insert(event.to_hash)
-  end # def receive
-end # class LogStash::Outputs::Mongodb
+    if event == LogStash::SHUTDOWN
+      finished
+      return
+    
+  end 
+end # class LogStash::Outputs::OpsGenie
